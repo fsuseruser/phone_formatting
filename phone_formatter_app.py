@@ -288,7 +288,27 @@ if uploaded_file is not None:
         )
 
         if download_format == "CSV (.csv)":
-            csv_bytes = result_df.to_csv(index=False).encode("utf-8-sig")
+            # CSV files carry no cell-type information. When Excel later
+            # opens the CSV, it auto-detects a value like "+971501234567"
+            # as a number (the leading "+" reads as a numeric sign to
+            # Excel) and, because it's a 12-13 digit number, re-applies
+            # its default "General" number format - which switches long
+            # numbers to scientific/decimal notation. That reintroduces
+            # exactly the problem this app fixes, just on the way back
+            # into Excel.
+            #
+            # The standard workaround is to force the phone-number column
+            # to be read as literal text by wrapping each value as an
+            # Excel "text-literal" formula: ="+971501234567". Excel then
+            # displays the value exactly as written, with no numeric
+            # reinterpretation, no decimals, and no scientific notation.
+            # (The .xlsx download doesn't need this - openpyxl already
+            # writes the value as a real string cell type.)
+            csv_export_df = result_df.copy()
+            csv_export_df[target_col] = csv_export_df[target_col].apply(
+                lambda v: f'="{v}"' if v else v
+            )
+            csv_bytes = csv_export_df.to_csv(index=False).encode("utf-8-sig")
             st.download_button(
                 label="\u2B07\uFE0F Download formatted CSV file",
                 data=csv_bytes,
